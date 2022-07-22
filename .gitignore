@@ -1,2 +1,6 @@
 .idea
 seaflow.iml
+dist
+build
+*.egg-info
+*/__pycache__

@@ -1,0 +1,326 @@
+[{
+  "identifier": "dag-root-x",
+  "name": "Root-x",
+  "version": 1,
+  "input_adapter": {
+    "n": "$.n"
+  },
+  "output_adapter": {
+    "root": "$.free3"
+  },
+  "components": [
+    {
+      "identifier": "dag-a",
+      "kind": "Dag",
+      "name": "A",
+      "input_adapter": {
+        "n": "$.n"
+      },
+      "output_adapter": {
+        "a": "$.a5",
+        "c": "$.c"
+      }
+    },
+    {
+      "identifier": "dag-b",
+      "kind": "Dag",
+      "name": "B",
+      "fission": {
+        "key": "$.free1"
+      },
+      "input_adapter": {
+        "n": "$.free1"
+      },
+      "output_adapter": {
+        "b": "$.b4"
+      },
+      "previous_nodes": ["node-free1"]
+    },
+    {
+      "identifier": "dag-c",
+      "kind": "Dag",
+      "name": "C",
+      "parent": "dag-a",
+      "input_adapter": {
+        "o": "$.a4"
+      },
+      "output_adapter": {
+        "c": "$.c1"
+      },
+      "previous_nodes": ["node-a4"]
+    },
+    {
+      "identifier": "dag-d",
+      "kind": "Dag",
+      "name": "D",
+      "iter": {
+        "key": "$.free1"
+      },
+      "input_adapter": {
+        "n": "$.free1"
+      },
+      "output_adapter": {
+        "d": "$.d2"
+      },
+      "previous_nodes": ["node-free1"]
+    },
+    {
+      "identifier": "node-a1",
+      "kind": "Node",
+      "name": "a1",
+      "dag": "dag-a",
+      "action": "action",
+      "loop": {
+        "condition": {
+          "and": [
+            {"<": [{"var": "index"}, 3]},
+            {"==": [{"var": "output.a1.0"}, 1]}
+          ]
+        },
+        "countdown": 3
+      },
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.n"
+      },
+      "output_adapter": {
+        "a1": "$.a"
+      }
+    },
+    {
+      "identifier": "node-a2",
+      "kind": "Node",
+      "name": "a2",
+      "dag": "dag-a",
+      "fission": {
+        "key": "$.a1"
+      },
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.a1"
+      },
+      "output_adapter": {
+        "a2": "$.b"
+      },
+      "previous_nodes": ["node-a1"]
+    },
+    {
+      "identifier": "node-a3",
+      "kind": "Node",
+      "name": "a3",
+      "dag": "dag-a",
+      "fission": {
+        "key": "$.a2"
+      },
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.a2"
+      },
+      "output_adapter": {
+        "a3": "$.s"
+      },
+      "previous_nodes": ["node-a2"]
+    },
+    {
+      "identifier": "node-a4",
+      "kind": "Node",
+      "name": "a4",
+      "dag": "dag-a",
+      "action": "external-action",
+      "max_retries": 0,
+      "input_adapter": {
+      },
+      "output_adapter": {
+        "a4": "$.o"
+      },
+      "previous_nodes": ["node-a1"]
+    },
+    {
+      "identifier": "node-a5",
+      "kind": "Node",
+      "name": "a5",
+      "dag": "dag-a",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "a": "$.a3",
+        "o": "$.a4"
+      },
+      "output_adapter": {
+        "a5": "$.s"
+      },
+      "previous_nodes": ["node-a3", "node-a4"]
+    },
+    {
+      "identifier": "node-a6",
+      "kind": "Node",
+      "name": "a6",
+      "dag": "dag-a",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "o": "$.a4"
+      },
+      "output_adapter": {
+      },
+      "previous_nodes": ["node-a4"]
+    },
+    {
+      "identifier": "node-c1",
+      "kind": "Node",
+      "name": "c1",
+      "dag": "dag-c",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "o": "$.o"
+      },
+      "output_adapter": {
+        "c1": "$.b"
+      }
+    },
+    {
+      "identifier": "node-b1",
+      "kind": "Node",
+      "name": "b1",
+      "dag": "dag-b",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.n"
+      },
+      "output_adapter": {
+        "b1": "$.a"
+      }
+    },
+    {
+      "identifier": "node-b2",
+      "kind": "Node",
+      "name": "b2",
+      "dag": "dag-b",
+      "fission": {
+        "key": "$.b1"
+      },
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.b1"
+      },
+      "output_adapter": {
+        "b2": "$.s"
+      },
+      "previous_nodes": ["node-b1"]
+    },
+    {
+      "identifier": "node-b3",
+      "kind": "Node",
+      "name": "b3",
+      "dag": "dag-b",
+      "action": "action",
+      "iter": {
+        "key": "$.b2"
+      },
+      "max_retries": 0,
+      "input_adapter": {
+        "s": "$.b2"
+      },
+      "output_adapter": {
+        "b3": "$.n"
+      },
+      "previous_nodes": ["node-b2"]
+    },
+    {
+      "identifier": "node-b4",
+      "kind": "Node",
+      "name": "b4",
+      "dag": "dag-b",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.b3"
+      },
+      "output_adapter": {
+        "b4": "$.a"
+      },
+      "previous_nodes": ["node-b3"]
+    },
+    {
+      "identifier": "node-free1",
+      "kind": "Node",
+      "name": "free1",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.n"
+      },
+      "output_adapter": {
+        "free1": "$.a"
+      }
+    },
+
+    {
+      "identifier": "node-free2",
+      "kind": "Node",
+      "name": "free2",
+      "fission": {
+        "key": "$.free1"
+      },
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.free1"
+      },
+      "output_adapter": {
+        "free2": "$.n"
+      },
+      "previous_nodes": ["node-free1"]
+    },
+    {
+      "identifier": "node-free3",
+      "kind": "Node",
+      "name": "free3",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "s": "$.a",
+        "a": "$.b"
+      },
+      "output_adapter": {
+        "free3": "$.b"
+      },
+      "previous_nodes": ["node-free2"],
+      "previous_dags": ["dag-a", "dag-b", "dag-d"]
+    },
+    {
+      "identifier": "node-d1",
+      "kind": "Node",
+      "name": "d1",
+      "dag": "dag-d",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.n"
+      },
+      "output_adapter": {
+        "d1": "$.n"
+      }
+    },
+    {
+      "identifier": "node-d2",
+      "kind": "Node",
+      "name": "d2",
+      "dag": "dag-d",
+      "action": "action",
+      "max_retries": 0,
+      "input_adapter": {
+        "n": "$.d1"
+      },
+      "output_adapter": {
+        "d2": "$.n"
+      },
+      "previous_nodes": ["node-d1"]
+    }
+  ]
+}]

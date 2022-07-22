@@ -1,0 +1,58 @@
+[
+  {
+    "name": "action",
+    "type": "Default",
+    "func": "examples.actions.test",
+    "input_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false, "default":  1},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false}
+    },
+    "output_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false, "default": ""}
+    }
+  },
+  {
+    "name": "external-action",
+    "type": "External",
+    "input_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false, "default":  1},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false}
+    },
+    "output_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false, "default": ""}
+    }
+  },
+  {
+    "name": "carrier-action",
+    "type": "Carrier",
+    "input_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false}
+    },
+    "output_def": {
+      "a": {"type": "Array", "required": false},
+      "o": {"type": "Object", "required": false},
+      "n": {"type": "Number", "required": false},
+      "b": {"type": "Boolean", "required": false},
+      "s": {"type": "String", "required": false}
+    }
+  }
+]
+

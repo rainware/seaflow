@@ -427,9 +427,9 @@ INSTALLED_APPS = [
 import os
 from celery import Celery
 from . import seaflow
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
 # app definition, 名字随意，启动worker时要使用这个名字
-app = Celery('core')
+app = Celery('example')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 # 在actions包下面定义actions，也可以使用别的名字
 app.autodiscover_tasks(related_name='actions')
@@ -438,7 +438,7 @@ seaflow.set_celery_app(app)
 
 5. 启动celery worker
 ```language=bash
-celery -A core worker --concurrency=3 -E -l info
+celery -A example worker --concurrency=3 -E -l info
 ```
 
 # 5. 任务的执行与控制

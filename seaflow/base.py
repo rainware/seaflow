@@ -1,6 +1,4 @@
 import functools
-import hashlib
-import json
 import sys
 from copy import deepcopy
 
@@ -10,17 +8,11 @@ from django.utils import timezone
 from json_logic import jsonLogic
 from timeout_decorator import timeout
 
-import core.contrib
-from core.contrib.seaflow import celery_app, tasks
-from core.contrib.seaflow.consts import ActionTypes, TaskStates, StepStates
-from core.contrib.seaflow.models import Action, Dag, Node, Task, Step
-from core.contrib.seaflow.params import ParamAdapter, ParamDefinition
-from core.contrib.seaflow.seagull import Seagull
-from core.contrib.seaflow.tasks import do_callback
-from core.contrib.seaflow.utils import SeaflowException, ComplexJSONEncoder, ParamDefinitionException, get_func, \
-    merge_outputs, merge_outputs_of_tasks, merge_outputs_of_steps, fission_inputs, iter_inputs, RevokeException, \
-    TimeoutException, merge_fission_outputs, TaskConfig, StepConfig, StateException, generate_identifier, \
-    SeaflowContext, del_attrs, ExternalActionFailed
+from .consts import ActionTypes, TaskStates, StepStates
+from .models import Action, Dag, Node, Task, Step
+from .params import ParamAdapter, ParamDefinition
+from .seagull import Seagull
+from .utils import *
 
 
 class Seaflow(object):
@@ -34,7 +26,6 @@ class Seaflow(object):
         return SeaflowTask.get(task_id)
 
     @staticmethod
-    @transaction.atomic()
     def load_actions(dsl):
         """
         load actions from dsl
@@ -59,7 +50,6 @@ class Seaflow(object):
         return actions
 
     @staticmethod
-    @transaction.atomic()
     def load_dag(dsl):
         """
         load dag from dsl
@@ -111,9 +101,9 @@ class Seaflow(object):
                     # root dag
                     version = dag_item.get('version', 1)
                     exists_dags = Dag.objects.filter(name=dag_item['name'], parent=None).order_by('-version')
-                    latest_dag = None
-                    if exists_dags: latest_dag = exists_dags[0]
-                    assert latest_dag.version < version, 'out of version'
+                    if exists_dags:
+                        latest_dag = exists_dags[0]
+                        assert latest_dag.version < version, 'out of version'
                     Dag.objects.filter(name=dag_item['name'], parent=None).update(latest=False)
                     d[x] = Dag.objects.create(
                         name=dag_item['name'],
@@ -276,13 +266,13 @@ class Seaflow(object):
         :param opts:
         :return:
         """
-
         def _dec(func):
             @functools.wraps(func)
             def __dec(celery_action, step_id):
                 celery_action.func = func
                 SeaflowStep.get(step_id)._execute(celery_action)
 
+            from . import celery_app
             return celery_app.task(bind=True)(__dec)
 
         return _dec
@@ -471,10 +461,11 @@ class SeaflowTask(object):
         self.load()
 
     def apply(self, sync=False, countdown=None):
+        from . import tasks
         if sync:
             self._apply()
         else:
-            core.contrib.seaflow.tasks.apply_root_task.apply_async((self.id,), countdown=countdown)
+            tasks.apply_root_task.apply_async((self.id,), countdown=countdown)
 
     def _apply(self):
         self.model.update(start_time=timezone.now(), state=StepStates.PROCESSING)
@@ -522,6 +513,7 @@ class SeaflowTask(object):
             )
 
     def terminate(self):
+        from . import celery_app
         self.reload()
         if self.model.state in [TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY, TaskStates.REVOKE]:
             tnow = timezone.now()
@@ -577,7 +569,7 @@ class SeaflowTask(object):
             SeaflowTask.get(task=t)._do_callback('TASK_STATE_%s' % TaskStates.SLEEP)
 
     def awake(self):
-
+        from . import tasks
         self.reload()
         if self.model.state != TaskStates.SLEEP:
             return
@@ -592,7 +584,7 @@ class SeaflowTask(object):
         for s in self.model.all_steps.prefetch_related('node').filter(state=TaskStates.SLEEP):
             if s.node.action_type == ActionTypes.Carrier:
                 # 旁路节点
-                func = core.contrib.seaflow.tasks.start_carrier_step
+                func = tasks.start_carrier_step
             elif s.node.action_type == ActionTypes.External:
                 # 外部节点
                 func = tasks.publish_external_step
@@ -742,6 +734,8 @@ class SeaflowTask(object):
         :param node:
         :return:
         """
+        from . import tasks
+
         ready = self._ready_to_execute_node(node)
         if not ready:
             return
@@ -813,7 +807,7 @@ class SeaflowTask(object):
                 s_step.seagull.info('action type: %s' % node.action_type)
                 if node.action_type == ActionTypes.Carrier:
                     # 旁路节点
-                    func = core.contrib.seaflow.tasks.start_carrier_step
+                    func = tasks.start_carrier_step
                 elif node.action_type == ActionTypes.External:
                     # 外部节点
                     func = tasks.publish_external_step
@@ -1108,6 +1102,8 @@ class SeaflowTask(object):
         :param node:
         :return:
         """
+
+        from . import tasks
         # previous_step
         previous_step = Step.objects.get(task=self.model, node=node, fission_index=fission_index,
                                          iter_index=iter_index - 1,
@@ -1161,10 +1157,10 @@ class SeaflowTask(object):
             s_step.seagull.info('action type: %s' % node.action_type)
             if node.action_type == ActionTypes.External:
                 # 外部节点
-                func = core.contrib.seaflow.base.Seaflow.publish_external_step
+                func = Seaflow.publish_external_step
             elif node.action_type == ActionTypes.Carrier:
                 # 旁路节点
-                func = core.contrib.seaflow.tasks.start_carrier_step
+                func = tasks.start_carrier_step
             else:
                 func = get_func(node.action.func)
 
@@ -1366,6 +1362,7 @@ class SeaflowTask(object):
         :param event:
         :return:
         """
+        from .tasks import do_callback
         if self.model.config.get('callback'):
             cb = self.model.config.get('callback')
             if cb['is_async']:
@@ -1410,8 +1407,8 @@ class SeaflowStep(object):
         self.seagull = Seagull.instance(self.model)
         self.config = self.model.config
 
-        self.task = core.contrib.seaflow.base.SeaflowTask.get(task=self.model.task)
-        self.root = core.contrib.seaflow.base.SeaflowTask.get(task=self.model.root)
+        self.task = SeaflowTask.get(task=self.model.task)
+        self.root = SeaflowTask.get(task=self.model.root)
 
     def reload(self):
         self.model.refresh_from_db()
@@ -1805,6 +1802,7 @@ class SeaflowStep(object):
         :param event:
         :return:
         """
+        from .tasks import do_callback
         if self.model.config.get('callback'):
             cb = self.model.config.get('callback')
             if cb['is_async']:

@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import jsonpath_rw as jsonpath
 
-from core.contrib.seaflow.utils import ParamDefinitionException, ParamAdaptException
+from .utils import ParamAdaptException
 
 
 class ParamType(object):

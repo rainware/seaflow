@@ -8,7 +8,6 @@ import time
 from enum import Enum
 
 import jsonpath_rw as jsonpath
-from django_mysql.models.functions import JSONSet
 
 
 def singleton_class(post_init=None):
@@ -154,6 +153,7 @@ class SeaflowContext(object):
         :return:
         """
 
+        from django_mysql.models.functions import JSONSet
         self.task.update(context=JSONSet('context', {'$.%s' % k: v for k, v in c.items()}), _refresh=False)
         self.reload()
 
