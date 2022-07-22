@@ -5,7 +5,7 @@ setuptools.setup(
     version="0.0.1-beta-6",
     author="rainware",
     author_email="kevin90116@gmail.com",
-    description="the most free process choreographer",
+    description="The most free process choreographer",
     url="https://github.com/rainware/seaflow",
     project_urls={
         "Source": "https://github.com/rainware/seaflow",
