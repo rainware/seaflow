@@ -1,7 +1,7 @@
 # seaflow
 The most free process choreographer
 
-<a>Docs</a>
+<a href="https://rainware.github.io/blogs/project%20documents/2022/07/22/seaflow-guide.html?">Seaflow Guide</a>
 
 # Install
 ```language=bash
@@ -37,4 +37,6 @@ celery -A main worker --concurrency=3 -E -l info
 ```
 python run_tasks.py
 ```
+
+#### Demo dag and task
 <img alt="README-f0076196.png" src="assets/README-f0076196.png" width="" height="" >
