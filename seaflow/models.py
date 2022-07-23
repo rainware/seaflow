@@ -25,7 +25,7 @@ class Action(BaseModel):
 
     name = models.CharField(max_length=64, db_index=True, unique=True)
     title = models.CharField(max_length=64)
-    type = models.CharField(max_length=32, choices=[(item.name, item.value) for item in ActionTypes])
+    type = models.CharField(max_length=32, choices=[(item.name, item.value) for item in ActionTypes], db_index=True)
     func = models.CharField(max_length=128, unique=True, null=True)
     input_def = models.JSONField(default=dict)
     output_def = models.JSONField(default=dict)
@@ -52,7 +52,7 @@ class Dag(BaseModel):
     name = models.CharField(max_length=64, db_index=True)
     title = models.CharField(max_length=64)
     version = models.PositiveIntegerField(null=True, db_index=True)  # root dag才有version
-    latest = models.BooleanField(null=True)
+    latest = models.BooleanField(null=True, db_index=True)
 
     root = models.ForeignKey('Dag', db_constraint=False, null=True,
                              related_name='descendants', on_delete=models.CASCADE)
@@ -118,7 +118,7 @@ class Node(BaseModel):
     output_adapter = models.JSONField(default=dict)
 
     action_type = models.CharField(max_length=32,
-                                   choices=[(item.name, item.value) for item in ActionTypes])
+                                   choices=[(item.name, item.value) for item in ActionTypes], db_index=True)
 
     # 分裂
     fissionable = models.BooleanField('可分裂', default=False)
@@ -160,7 +160,7 @@ class Task(BaseModel):
     title = models.CharField(max_length=64)
     dag = models.ForeignKey('Dag', db_constraint=False, on_delete=models.PROTECT)
     state = models.CharField(max_length=64,
-                             choices=[(item.name, item.value) for item in TaskStates])
+                             choices=[(item.name, item.value) for item in TaskStates], db_index=True)
 
     root = models.ForeignKey('Task', db_constraint=False, null=True,
                              related_name='descendants', on_delete=models.CASCADE)
@@ -281,7 +281,7 @@ class Step(BaseModel):
     root = models.ForeignKey('Task', db_constraint=False, related_name='all_steps', on_delete=models.CASCADE)
     task = models.ForeignKey('Task', db_constraint=False, related_name='steps', on_delete=models.CASCADE)
     state = models.CharField(max_length=64,
-                             choices=[(item.name, item.value) for item in StepStates])
+                             choices=[(item.name, item.value) for item in StepStates], db_index=True)
 
     previous_steps = models.ManyToManyField('Step', db_constraint=False, related_name='next_steps',
                                             db_table='seaflow_step_to_step')
@@ -386,8 +386,7 @@ class Log(BaseModel):
     """
 
     id = models.AutoField(primary_key=True)
-    ref_type = models.CharField(max_length=16, choices=[('TASK', 'Task'), ('STEP', 'Step')]
-                                )
+    ref_type = models.CharField(max_length=16, choices=[('TASK', 'Task'), ('STEP', 'Step')], db_index=True)
     ref_id = models.IntegerField(db_index=True)
     ts = models.FloatField()
     content = models.TextField()
