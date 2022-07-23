@@ -52,13 +52,17 @@ ALTER TABLE `seaflow_dag` ADD COLUMN `root_id` integer NULL;
 -- Alter unique_together for step (1 constraint(s))
 --
 ALTER TABLE `seaflow_step` ADD CONSTRAINT `seaflow_step_task_id_node_id_fission__69fab8ea_uniq` UNIQUE (`task_id`, `node_id`, `fission_index`, `iter_index`);
+CREATE INDEX `seaflow_action_type_639cd25b` ON `seaflow_action` (`type`);
 CREATE INDEX `seaflow_dag_name_2b866319` ON `seaflow_dag` (`name`);
 CREATE INDEX `seaflow_dag_version_e31da05d` ON `seaflow_dag` (`version`);
+CREATE INDEX `seaflow_dag_latest_fa8b5c83` ON `seaflow_dag` (`latest`);
 CREATE INDEX `seaflow_dag_parent_id_940db85b` ON `seaflow_dag` (`parent_id`);
 ALTER TABLE `seaflow_dag_to_dag` ADD CONSTRAINT `seaflow_dag_to_dag_from_dag_id_to_dag_id_08f0999d_uniq` UNIQUE (`from_dag_id`, `to_dag_id`);
 CREATE INDEX `seaflow_dag_to_dag_from_dag_id_2dc4f9c9` ON `seaflow_dag_to_dag` (`from_dag_id`);
 CREATE INDEX `seaflow_dag_to_dag_to_dag_id_dd5327fc` ON `seaflow_dag_to_dag` (`to_dag_id`);
+CREATE INDEX `seaflow_log_ref_type_72325d91` ON `seaflow_log` (`ref_type`);
 CREATE INDEX `seaflow_log_ref_id_13884e51` ON `seaflow_log` (`ref_id`);
+CREATE INDEX `seaflow_node_action_type_f8f9126a` ON `seaflow_node` (`action_type`);
 CREATE INDEX `seaflow_node_action_id_f4627bb5` ON `seaflow_node` (`action_id`);
 CREATE INDEX `seaflow_node_dag_id_878599f7` ON `seaflow_node` (`dag_id`);
 CREATE INDEX `seaflow_node_root_dag_id_4ede0c4e` ON `seaflow_node` (`root_dag_id`);
@@ -69,16 +73,20 @@ ALTER TABLE `seaflow_node_to_node` ADD CONSTRAINT `seaflow_node_to_node_from_nod
 CREATE INDEX `seaflow_node_to_node_from_node_id_d668f94b` ON `seaflow_node_to_node` (`from_node_id`);
 CREATE INDEX `seaflow_node_to_node_to_node_id_8f15f4bf` ON `seaflow_node_to_node` (`to_node_id`);
 CREATE INDEX `seaflow_step_identifier_fb59d718` ON `seaflow_step` (`identifier`);
+CREATE INDEX `seaflow_step_state_631c8bd2` ON `seaflow_step` (`state`);
 CREATE INDEX `seaflow_step_fission_index_ff133271` ON `seaflow_step` (`fission_index`);
 CREATE INDEX `seaflow_step_iter_index_ae930755` ON `seaflow_step` (`iter_index`);
+CREATE INDEX `seaflow_step_loop_index_379b740c` ON `seaflow_step` (`loop_index`);
 CREATE INDEX `seaflow_step_log_refetch_time_3ca2bbe6` ON `seaflow_step` (`log_refetch_time`);
 CREATE INDEX `seaflow_step_node_id_fddc819c` ON `seaflow_step` (`node_id`);
 ALTER TABLE `seaflow_step_to_step` ADD CONSTRAINT `seaflow_step_to_step_from_step_id_to_step_id_a93a5f93_uniq` UNIQUE (`from_step_id`, `to_step_id`);
 CREATE INDEX `seaflow_step_to_step_from_step_id_eb454a18` ON `seaflow_step_to_step` (`from_step_id`);
 CREATE INDEX `seaflow_step_to_step_to_step_id_db5c6dd6` ON `seaflow_step_to_step` (`to_step_id`);
 ALTER TABLE `seaflow_task` ADD CONSTRAINT `seaflow_task_parent_id_dag_id_fission_118db3e1_uniq` UNIQUE (`parent_id`, `dag_id`, `fission_index`, `iter_index`);
+CREATE INDEX `seaflow_task_state_876e355d` ON `seaflow_task` (`state`);
 CREATE INDEX `seaflow_task_fission_index_12d3032d` ON `seaflow_task` (`fission_index`);
 CREATE INDEX `seaflow_task_iter_index_8b967e19` ON `seaflow_task` (`iter_index`);
+CREATE INDEX `seaflow_task_loop_index_85bc7359` ON `seaflow_task` (`loop_index`);
 CREATE INDEX `seaflow_task_log_refetch_time_f960a8a7` ON `seaflow_task` (`log_refetch_time`);
 CREATE INDEX `seaflow_task_dag_id_65a80208` ON `seaflow_task` (`dag_id`);
 CREATE INDEX `seaflow_task_parent_id_7f3f7e1f` ON `seaflow_task` (`parent_id`);

@@ -182,7 +182,7 @@ class Task(BaseModel):
     iter_end = models.BooleanField('迭代末端', null=True)
 
     # 循环
-    loop_index = models.IntegerField('循环序号', default=0)
+    loop_index = models.IntegerField('循环序号', db_index=True, default=0)
 
     input = models.JSONField('输入')
     context = models.JSONField('上下文', default=dict)
@@ -298,7 +298,7 @@ class Step(BaseModel):
     iter_end = models.BooleanField('迭代末端', null=True)
 
     # 循环
-    loop_index = models.IntegerField('循环序号', default=0)
+    loop_index = models.IntegerField('循环序号', db_index=True, default=0)
 
     input = models.JSONField('输入')
     output = models.JSONField('输出', default=dict)
