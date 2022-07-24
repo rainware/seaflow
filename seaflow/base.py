@@ -1,4 +1,5 @@
 import functools
+import logging
 import sys
 from copy import deepcopy
 
@@ -448,7 +449,7 @@ class SeaflowTask(object):
         self.id = self.model.id
         self.name = self.model.name
         self.context = (self.model.root or self.model).context
-        self.seagull = Seagull.instance(self.model)
+        self.seagull = Seagull.instance(self.model, level=logging.INFO)
         self.config = self.model.config
 
         if self.model.parent:
@@ -901,10 +902,9 @@ class SeaflowTask(object):
         self.reload()
         if self.model.state not in [TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY]:
             return
-        seagull = Seagull.instance(self.model)
 
         if e:
-            error = seagull.trace_error(e)
+            error = self.seagull.trace_error(e)
             if self.model.retries < self.model.config.get('max_retries', 0) and not isinstance(e, RevokeException):
                 state = TaskStates.RETRY
             elif isinstance(e, TimeoutException):
@@ -914,18 +914,18 @@ class SeaflowTask(object):
             else:
                 state = TaskStates.ERROR
         else:
-            seagull.info('output: %s' % json.dumps(outputs, cls=ComplexJSONEncoder))
+            self.seagull.info('output: %s' % json.dumps(outputs, cls=ComplexJSONEncoder))
             error = ""
             if self.model.retries < self.model.config.get('max_retries', 0):
                 state = TaskStates.RETRY
             else:
                 state = TaskStates.ERROR
 
-        seagull.error('task 【%s】 broken: %s' % (self.model.name, state.value))
+        self.seagull.error('task 【%s】 broken: %s' % (self.model.name, state.value))
         if state == TaskStates.RETRY:
-            seagull.info('retry in %ss.' % self.model.dag.retry_countdown)
+            self.seagull.info('retry in %ss.' % self.model.dag.retry_countdown)
 
-        seagull.flush(True, merge=True)
+        self.seagull.flush(True, merge=True)
         end_time = timezone.now()
         duration = end_time - self.model.start_time
         self.model.update(
@@ -1404,7 +1404,7 @@ class SeaflowStep(object):
         self.id = self.model.id
         self.name = self.model.name
         self.context = self.model.root.context
-        self.seagull = Seagull.instance(self.model)
+        self.seagull = Seagull.instance(self.model, level=logging.INFO)
         self.config = self.model.config
 
         self.task = SeaflowTask.get(task=self.model.task)
@@ -1446,19 +1446,21 @@ class SeaflowStep(object):
             celery_action.root = self.model.root
             celery_action.context = SeaflowContext(task=self.model.root)
 
+            fresh_new = False
             if self.model.state == StepStates.PENDING:
                 # fresh new
+                fresh_new = True
                 self.seagull.info('step 【%s】 started' % self.name)
                 self.seagull.info('input: %s' % json.dumps(self.model.input, ensure_ascii=False))
                 if self.model.node.loopable:
                     self.seagull.info('loop started')
-                    self.seagull.info('loop-%s started' % self.model.loop_index)
+                    self.seagull.debug('loop-%s started' % self.model.loop_index)
             # 是否睡眠状态
             elif self.model.state == StepStates.SLEEP:
                 self.seagull.info('Good Morning.')
             elif self.model.state == StepStates.PROCESSING:
                 if self.model.node.loopable:
-                    self.seagull.info('loop-%s started' % self.model.loop_index)
+                    self.seagull.debug('loop-%s started' % self.model.loop_index)
 
             # 判断是否进入睡眠
             sleep = False
@@ -1503,7 +1505,8 @@ class SeaflowStep(object):
                 raise RevokeException(
                     'detect root task 【%s】 state: %s' % (self.model.root.name, self.model.root.state))
 
-            self.seagull.info('step execution...')
+            if fresh_new:
+                self.seagull.info('step execution...')
             if self.model.config.get('timeout'):
                 res = timeout(self.model.config.get('timeout'),
                               timeout_exception=TimeoutException)(celery_action.func)(celery_action, **self.model.input)
@@ -1686,7 +1689,7 @@ class SeaflowStep(object):
         if self.model.state != StepStates.PROCESSING:
             return
 
-        self.seagull.info(
+        self.seagull.debug(
             'loop-%s end, output: %s' % (self.model.loop_index, json.dumps(outputs, cls=ComplexJSONEncoder)))
         loop_end = self._is_loop_end(outputs)
         if loop_end:
