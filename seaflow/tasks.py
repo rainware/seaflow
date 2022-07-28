@@ -20,6 +20,30 @@ def apply_root_task(task_id):
     SeaflowTask.get(task_id).apply(sync=True)
 
 
+@celery_app.task
+def sleep_root_task(task_id):
+    from .base import SeaflowTask
+    SeaflowTask.get(task_id).sleep(sync=True)
+
+
+@celery_app.task
+def awake_root_task(task_id):
+    from .base import SeaflowTask
+    SeaflowTask.get(task_id).awake(sync=True)
+
+
+@celery_app.task
+def revoke_root_task(task_id):
+    from .base import SeaflowTask
+    SeaflowTask.get(task_id).revoke(sync=True)
+
+
+@celery_app.task
+def terminate_root_task(task_id):
+    from .base import SeaflowTask
+    SeaflowTask.get(task_id).terminate(sync=True)
+
+
 @celery_app.task()
 def do_callback(func, event, data):
     """

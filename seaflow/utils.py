@@ -295,6 +295,19 @@ def iter_inputs(inputs, iter_key):
     return dict(inputs, **{key: sequence[0]}), key, sequence
 
 
+def loop_inputs(inputs, loop_key):
+    """
+    :param inputs:
+    :param loop_key:
+    :return: current_inputs, loop_sequence
+    """
+    rs = jsonpath.parse(loop_key).find(inputs)
+    assert len(rs) == 1, rs
+    key = rs[0].path.fields[0]
+    sequence = rs[0].value
+    return dict(inputs, **{key: sequence[0]}), key, sequence
+
+
 def merge_outputs_of_tasks(tasks):
     fission_dict = {}
     outputs_list = []

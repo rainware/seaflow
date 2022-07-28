@@ -191,10 +191,12 @@ class Seaflow(object):
                 dag = Dag.objects.prefetch_related('descendants', 'all_nodes', 'all_nodes__action').get(pk=dag_id)
             else:
                 if dag_version:
-                    dag = Dag.objects.prefetch_related('descendants', 'all_nodes', 'all_nodes__action').get(name=dag_name,
-                                                                                                        version=dag_version)
+                    dag = Dag.objects.prefetch_related('descendants', 'all_nodes', 'all_nodes__action').get(
+                        name=dag_name,
+                        version=dag_version)
                 else:
-                    dag = Dag.objects.prefetch_related('descendants', 'all_nodes', 'all_nodes__action').get(name=dag_name, latest=True)
+                    dag = Dag.objects.prefetch_related('descendants', 'all_nodes', 'all_nodes__action').get(
+                        name=dag_name, latest=True)
         except models.ObjectDoesNotExist as e:
             sys.stderr.writelines(['dag not exists, id: %s, name: %s, version: %s' % (dag_id, dag_name, dag_version)])
             raise
@@ -267,6 +269,7 @@ class Seaflow(object):
         :param opts:
         :return:
         """
+
         def _dec(func):
             @functools.wraps(func)
             def __dec(celery_action, step_id):
@@ -462,137 +465,135 @@ class SeaflowTask(object):
         self.load()
 
     def apply(self, sync=False, countdown=None):
-        from . import tasks
         if sync:
             self._apply()
         else:
+            from . import tasks
             tasks.apply_root_task.apply_async((self.id,), countdown=countdown)
 
+    def revoke(self, sync=False):
+        """
+        :return:revoke root task
+        """
+        if sync:
+            self._revoke()
+        else:
+            from . import tasks
+            tasks.revoke_root_task.apply_async((self.id,))
+
+    def terminate(self, sync=False):
+        if sync:
+            self._terminate()
+        else:
+            from . import tasks
+            tasks.terminate_root_task.apply_async((self.id,))
+
+    def sleep(self, sync=False):
+        if sync:
+            self._sleep()
+        else:
+            from . import tasks
+            tasks.sleep_root_task.apply_async((self.id,))
+
+    def awake(self, sync=False):
+        if sync:
+            self._awake()
+        else:
+            from . import tasks
+            tasks.awake_root_task.apply_async((self.id,))
+
     def _apply(self):
-        self.model.update(start_time=timezone.now(), state=StepStates.PROCESSING)
-        self._do_callback('TASK_STATE_%s' % TaskStates.PROCESSING)
-        self.seagull.info('task 【%s】 started: %s' % (self.name, self.id))
+        try:
+            self.model.update(start_time=timezone.now(), state=StepStates.PROCESSING)
+            self._do_callback('TASK_STATE_%s' % TaskStates.PROCESSING)
+            self.seagull.info('task 【%s】 started: %s' % (self.name, self.id))
 
-        # 第一批free node
-        nodes = self.model.dag.nodes.filter(previous_dags=None, previous_nodes=None)
-        if nodes:
-            self.seagull.info('apply nodes...')
-            [self._apply_node(n) for n in nodes]
+            # 第一批直属node
+            nodes = self.model.dag.nodes.filter(previous_dags=None, previous_nodes=None)
+            if nodes:
+                self.seagull.info('apply nodes...')
+                [self._apply_node(n) for n in nodes]
 
-        # 第一批dag
-        dags = self.model.dag.children.filter(previous_dags=None, previous_nodes=None)
-        if dags:
-            self.seagull.info('apply dags...')
-            [self._apply_dag(d) for d in dags]
+            # 第一批dag
+            dags = self.model.dag.children.filter(previous_dags=None, previous_nodes=None)
+            if dags:
+                self.seagull.info('apply dags...')
+                [self._apply_dag(d) for d in dags]
+            self.seagull.flush(True)
+        except Exception as e:
+            self.seagull.flush(True)
+            self._break_off(e)
 
-        self.seagull.flush(True)
-
-    def revoke(self):
+    def _revoke(self):
+        """
+        :return:
+        """
         self.reload()
-        if self.model.state in [TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY]:
-            tnow = timezone.now()
-            duration = 0
-            if self.model.start_time:
-                duration = tnow - self.model.start_time
-                duration = float('%s.%s' % (duration.seconds, duration.microseconds))
-            self.model.update(
-                state=TaskStates.REVOKE,
-                end_time=tnow,
-                duration=duration
-            )
-            self._do_callback('TASK_STATE_%s' % TaskStates.REVOKE)
-        for t in self.model.descendants.filter(state__in=[TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY]):
-            tnow = timezone.now()
-            duration = 0
-            if t.start_time:
-                duration = tnow - t.start_time
-                duration = float('%s.%s' % (duration.seconds, duration.microseconds))
-            t.update(
-                state=TaskStates.REVOKE,
-                end_time=tnow,
-                duration=duration
-            )
+        if self.model.state not in TaskStates.revocable_states():
+            return
+        tnow = timezone.now()
+        duration = 0
+        if self.model.start_time:
+            duration = tnow - self.model.start_time
+            duration = float('%s.%s' % (duration.seconds, duration.microseconds))
+        self.model.update(
+            state=TaskStates.REVOKE,
+            end_time=tnow,
+            duration=duration
+        )
+        self._do_callback('TASK_STATE_%s' % TaskStates.REVOKE)
+        for t in self.model.children.filter(state__in=TaskStates.revocable_states()):
+            self.__class__.get(task=t)._revoke()
 
-    def terminate(self):
-        from . import celery_app
+    def _terminate(self):
+        """
+        :return:
+        """
         self.reload()
-        if self.model.state in [TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY, TaskStates.REVOKE]:
-            tnow = timezone.now()
-            duration = 0
-            if self.model.start_time:
-                duration = tnow - self.model.start_time
-                duration = float('%s.%s' % (duration.seconds, duration.microseconds))
-            self.model.update(
-                state=TaskStates.TERMINATE,
-                end_time=timezone.now(),
-                duration=duration
-            )
-            self._do_callback('TASK_STATE_%s' % TaskStates.TERMINATE)
-        for t in self.model.descendants.filter(state__in=[TaskStates.PENDING, TaskStates.PROCESSING,
-                                                          TaskStates.RETRY, TaskStates.REVOKE]):
-            tnow = timezone.now()
-            duration = 0
-            if t.start_time:
-                duration = tnow - t.start_time
-                duration = float('%s.%s' % (duration.seconds, duration.microseconds))
-            Seagull.instance(t).flush(True, merge=True)
-            t.update(
-                state=TaskStates.TERMINATE,
-                end_time=tnow,
-                duration=duration
-            )
-        for step in self.model.all_steps.filter(state__in=[StepStates.PENDING,
-                                                           StepStates.PUBLISH,
-                                                           StepStates.PROCESSING,
-                                                           StepStates.SLEEP,
-                                                           StepStates.RETRY]):
-            tnow = timezone.now()
-            duration = 0
-            if step.start_time:
-                duration = tnow - step.start_time
-                duration = float('%s.%s' % (duration.seconds, duration.microseconds))
-            Seagull.instance(step).flush(True, merge=True)
-            step.update(
-                state=StepStates.TERMINATE,
-                end_time=timezone.now(),
-                duration=duration
-            )
-            if AsyncResult(step.identifier).state in ['PENDING', 'RECEIVED', 'STARTED', 'RETRY']:
-                celery_app.control.revoke(step.identifier, terminate=True)
+        if self.model.state not in TaskStates.terminable_states():
+            return
+        tnow = timezone.now()
+        duration = 0
+        if self.model.start_time:
+            duration = tnow - self.model.start_time
+            duration = float('%s.%s' % (duration.seconds, duration.microseconds))
+        self.seagull.flush(True, merge=True)
+        self.model.update(
+            state=TaskStates.TERMINATE,
+            end_time=timezone.now(),
+            duration=duration
+        )
+        self._do_callback('TASK_STATE_%s' % TaskStates.TERMINATE)
+        for t in self.model.children.filter(state__in=TaskStates.terminable_states()):
+            self.__class__.get(task=t)._terminate()
+        for s in self.model.steps.filter(state__in=StepStates.terminable_states()):
+            SeaflowStep.get(step=s)._terminate()
 
-    def sleep(self):
+    def _sleep(self):
         self.reload()
-        if self.model.state in [TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY]:
-            self.model.update(state=TaskStates.SLEEP)
-            self._do_callback('TASK_STATE_%s' % TaskStates.SLEEP)
-        for t in self.model.descendants.filter(state__in=[TaskStates.PENDING, TaskStates.PROCESSING, TaskStates.RETRY]):
-            t.update(state=TaskStates.SLEEP)
-            SeaflowTask.get(task=t)._do_callback('TASK_STATE_%s' % TaskStates.SLEEP)
+        if self.model.state not in TaskStates.sleepable_states():
+            return
 
-    def awake(self):
-        from . import tasks
+        self.model.update(state=TaskStates.SLEEP)
+        self._do_callback('TASK_STATE_%s' % TaskStates.SLEEP)
+        for t in self.model.children.filter(state__in=TaskStates.sleepable_states()):
+            self.__class__.get(task=t)._sleep()
+
+    def _awake(self):
+        """
+        :return:
+        """
+
         self.reload()
         if self.model.state != TaskStates.SLEEP:
             return
 
         self.model.update(state=TaskStates.PROCESSING)
         self._do_callback('TASK_STATE_%s' % TaskStates.PROCESSING)
-        for t in self.model.descendants.filter(state=TaskStates.SLEEP):
-            t.update(state=TaskStates.PROCESSING)
-            SeaflowTask.get(task=t)._do_callback('TASK_STATE_%s' % TaskStates.PROCESSING)
-
-        # steps
-        for s in self.model.all_steps.prefetch_related('node').filter(state=TaskStates.SLEEP):
-            if s.node.action_type == ActionTypes.Carrier:
-                # 旁路节点
-                func = tasks.start_carrier_step
-            elif s.node.action_type == ActionTypes.External:
-                # 外部节点
-                func = tasks.publish_external_step
-            else:
-                # 普通节点
-                func = get_func(s.node.action.func)
-            func.delay(s.id)
+        for t in self.model.children.filter(state=TaskStates.SLEEP):
+            self.__class__.get(task=t)._awake()
+        for s in self.model.steps.prefetch_related('node').filter(state=TaskStates.SLEEP):
+            SeaflowStep.get(step=s)._awake()
 
     def _apply_dag(self, dag):
         """
@@ -631,7 +632,7 @@ class SeaflowTask(object):
                 defaults=dict(
                     name=dag.name,
                     title=dag.title,
-                    state=TaskStates.PROCESSING,
+                    state=TaskStates.PENDING,
                     fission_count=_fission_count,
                     iter_end=False if _iterable else None,
                     input=_inputs,
@@ -645,7 +646,6 @@ class SeaflowTask(object):
                 fission_index=_fission_index,
                 iter_index=_iter_index
             )
-            s_task = SeaflowTask.get(task=t)
             if not created:
                 self.seagull.warn('task 【%s】%s%s already exists'
                                   % (t.name,
@@ -658,28 +658,13 @@ class SeaflowTask(object):
             t.previous_tasks.set(previous_tasks)
             t.previous_steps.set(previous_steps)
 
-            try:
-                s_task.seagull.info('task 【%s】%s%s created: %s'
-                                    % (t.name,
-                                       ' fission-%s' % _fission_index if _fissionable else '',
-                                       ' iter-%s' % _iter_index if _iterable else '',
-                                       t.id))
-
-                # 第一批free node
-                _nodes = dag.nodes.filter(previous_dags=None, previous_nodes=None)
-                if _nodes:
-                    s_task.seagull.info('apply nodes...')
-                    [s_task._apply_node(n) for n in _nodes]
-
-                # 第一批dag
-                _dags = dag.children.filter(previous_dags=None, previous_nodes=None)
-                if _dags:
-                    s_task.seagull.info('apply dags...')
-                    [s_task._apply_dag(d) for d in _dags]
-                s_task.seagull.flush(True)
-            except Exception as e:
-                s_task.seagull.flush(True)
-                s_task._break_off(e)
+            s_task = self.__class__.get(task=t)
+            s_task.seagull.info('task 【%s】%s%s created: %s'
+                                % (t.name,
+                                   ' fission-%s' % t.fission_index if t.dag.fissionable else '',
+                                   ' iter-%s' % t.iter_index if t.dag.iterable else '',
+                                   t.id))
+            s_task._apply()
 
         if dag.fissionable:
             # 分裂
@@ -735,7 +720,6 @@ class SeaflowTask(object):
         :param node:
         :return:
         """
-        from . import tasks
 
         ready = self._ready_to_execute_node(node)
         if not ready:
@@ -764,10 +748,12 @@ class SeaflowTask(object):
 
         def _apply(_inputs,
                    _fissionable=False, _fission_index=0, _fission_count=1,
-                   _iterable=False, _iter_index=0, _iter_context=None):
+                   _iterable=False, _iter_index=0, _iter_context=None,
+                   _loop_index=0, _loop_context=None):
 
             extra = {}
-            if _iter_context: extra['iter_context'] = _iter_context
+            if _iter_context is not None: extra['iter_context'] = _iter_context
+            if _loop_context is not None: extra['loop_context'] = _loop_context
 
             s, created = Step.objects.get_or_create(
                 defaults=dict(
@@ -784,9 +770,10 @@ class SeaflowTask(object):
                 node=node,
                 task=self.model,
                 fission_index=_fission_index,
-                iter_index=_iter_index
+                iter_index=_iter_index,
+                loop_index=_loop_index
             )
-            s_step = SeaflowStep.get(step=s)
+
             if not created:
                 self.seagull.warn('step 【%s】%s%s already exists'
                                   % (s.name,
@@ -798,30 +785,13 @@ class SeaflowTask(object):
                 return
             s.previous_tasks.set(previous_tasks)
             s.previous_steps.set(previous_steps)
-
-            try:
-                s_step.seagull.info('step 【%s】%s%s created: %s'
-                                    % (s.name,
-                                       ' fission-%s' % _fission_index if _fissionable else '',
-                                       ' iter-%s' % _iter_index if _iterable else '',
-                                       s.id))
-                s_step.seagull.info('action type: %s' % node.action_type)
-                if node.action_type == ActionTypes.Carrier:
-                    # 旁路节点
-                    func = tasks.start_carrier_step
-                elif node.action_type == ActionTypes.External:
-                    # 外部节点
-                    func = tasks.publish_external_step
-                else:
-                    # 普通节点
-                    func = get_func(node.action.func)
-
-                s_step.seagull.flush(True)
-
-                func.apply_async((s.id,), countdown=s.config.get('countdown', 0))
-            except Exception as e:
-                s_step.seagull.flush(True)
-                s_step._break_off(e)
+            s_step = SeaflowStep.get(step=s)
+            s_step.seagull.info('step 【%s】%s%s created: %s'
+                                % (s.name,
+                                   ' fission-%s' % s.fission_index if s.node.fissionable else '',
+                                   ' iter-%s' % s.iter_index if s.node.iterable else '',
+                                   s.id))
+            s_step._apply()
 
         if node.fissionable:
             # 分裂
@@ -866,17 +836,25 @@ class SeaflowTask(object):
                        json.dumps(ii, ensure_ascii=False)))
                 _apply(ii, node.fissionable, i, fission_count, node.iterable, iter_index, iter_context)
         else:
+            iter_index = 0
+            iter_context = None
+            loop_index = 0
+            loop_context = None
             if node.iterable:
                 inputs, iter_key, iter_sequence = iter_inputs(inputs, node.iter_config['key'])
-                iter_index = 0
                 iter_context = {
                     'key': iter_key,
                     'sequence': iter_sequence
                 }
                 self.seagull.info('node 【%s】 start iter-%s' % (node.name, iter_index))
-            else:
-                iter_index = 0
-                iter_context = None
+            if node.loopable:
+                loop_context = dict()
+                if node.loop_config.get('key'):
+                    inputs, loop_key, loop_sequence = loop_inputs(inputs, node.loop_config['key'])
+                    loop_context.update({
+                        'key': loop_key,
+                        'sequence': loop_sequence
+                    })
             if not (node.action_type == ActionTypes.Carrier and not input_adapter):
                 # carrier特殊处理
                 inputs = input_adapter.adapt(inputs)
@@ -895,7 +873,7 @@ class SeaflowTask(object):
                               % (node.name,
                                  ' iter-%s' % iter_index if node.iterable else '',
                                  json.dumps(inputs, ensure_ascii=False)))
-            _apply(inputs, node.fissionable, 0, 1, node.iterable, iter_index, iter_context)
+            _apply(inputs, node.fissionable, 0, 1, node.iterable, iter_index, iter_context, loop_index, loop_context)
         self.seagull.flush(True)
 
     def _break_off(self, e=None, outputs={}):
@@ -1327,6 +1305,18 @@ class SeaflowTask(object):
 
         return not jsonLogic(loop_condition, data)
 
+    def ended(self):
+        return self.model.state in TaskStates.end_states()
+
+    def finished(self):
+        return self.model.state in TaskStates.finish_states()
+
+    def failed(self):
+        return self.model.state in TaskStates.fail_states()
+
+    def interrupted(self):
+        return self.model.state in TaskStates.interrupt_states()
+
     def _generate_task_config(self, dag):
         """
         :param dag: sub dag
@@ -1414,6 +1404,18 @@ class SeaflowStep(object):
         self.model.refresh_from_db()
         self.load()
 
+    def ended(self):
+        return self.model.state in StepStates.end_states()
+
+    def finished(self):
+        return self.model.state in StepStates.finish_states()
+
+    def failed(self):
+        return self.model.state in StepStates.fail_states()
+
+    def interrupted(self):
+        return self.model.state in StepStates.interrupt_states()
+
     def _dispatch(self, identity={}):
         """
         派发外部任务
@@ -1437,6 +1439,48 @@ class SeaflowStep(object):
             self.seagull.flush(True)
 
         return identifier
+
+    def _apply(self):
+        """
+        :return:
+        """
+        from . import tasks
+        try:
+            self.seagull.info('action type: %s' % self.model.node.action_type)
+            # if self._skip_or_not():
+            #     self._skip()
+            #     return
+            if self.model.node.action_type == ActionTypes.Carrier:
+                # 旁路节点
+                func = tasks.start_carrier_step
+            elif self.model.node.action_type == ActionTypes.External:
+                # 外部节点
+                func = tasks.publish_external_step
+            else:
+                # 普通节点
+                func = get_func(self.model.node.action.func)
+
+            self.seagull.flush(True)
+            func.apply_async((self.id,), countdown=self.model.config.get('countdown', 0))
+        except Exception as e:
+            self.seagull.flush(True)
+            self._break_off(e)
+
+    def _skip(self):
+        """
+        :return:
+        """
+        # 状态修改为SKIP
+
+        # output
+        adapter = ParamAdapter.from_json(self.model.node.skip_config.get('output', {}))
+        data = {
+            'input': self.model.input,
+            'context': (self.model.root or self.model.task).context
+        }
+        outputs = adapter.adapt(data)
+        self.seagull.info('step skipped')
+        self._finish(outputs=outputs, state=StepStates.SKIP)
 
     def _execute(self, celery_action):
         celery_action.step = self.model
@@ -1488,20 +1532,10 @@ class SeaflowStep(object):
                 self.model.update(identifier=celery_action.request.id)
 
             # 是否撤销
-            if self.model.task.state in [
-                TaskStates.ERROR,
-                TaskStates.TIMEOUT,
-                TaskStates.REVOKE,
-                TaskStates.TERMINATE,
-            ]:
+            if self.model.task.state in (TaskStates.fail_states() + TaskStates.interrupt_states()):
                 raise RevokeException(
                     'detect task 【%s】 state: %s' % (self.model.task.name, self.model.task.state))
-            if self.model.root.state in [
-                TaskStates.ERROR,
-                TaskStates.TIMEOUT,
-                TaskStates.REVOKE,
-                TaskStates.TERMINATE,
-            ]:
+            if self.model.root.state in (TaskStates.fail_states() + TaskStates.interrupt_states()):
                 raise RevokeException(
                     'detect root task 【%s】 state: %s' % (self.model.root.name, self.model.root.state))
 
@@ -1558,20 +1592,10 @@ class SeaflowStep(object):
                     return
 
             # 是否撤销
-            if self.model.task.state in [
-                TaskStates.ERROR,
-                TaskStates.TIMEOUT,
-                TaskStates.REVOKE,
-                TaskStates.TERMINATE,
-            ]:
+            if self.model.task.state in (TaskStates.fail_states() + TaskStates.interrupt_states()):
                 raise RevokeException(
                     'detect task 【%s】 state: %s' % (self.model.task.name, self.model.task.state))
-            if self.model.root.state in [
-                TaskStates.ERROR,
-                TaskStates.TIMEOUT,
-                TaskStates.REVOKE,
-                TaskStates.TERMINATE,
-            ]:
+            if self.model.root.state in (TaskStates.fail_states() + TaskStates.interrupt_states()):
                 raise RevokeException(
                     'detect root task 【%s】 state: %s' % (self.model.root.name, self.model.root.state))
 
@@ -1589,19 +1613,8 @@ class SeaflowStep(object):
             self._do_callback('STEP_STATE_%s' % StepStates.PROCESSING)
             self.seagull.info('step 【%s】 started' % self.name)
             # 是否撤销
-            revoke = self.model.task.state in [
-                TaskStates.ERROR,
-                TaskStates.TIMEOUT,
-                TaskStates.REVOKE,
-                TaskStates.TERMINATE,
-            ] or self.model.root.state in [
-                         TaskStates.ERROR,
-                         TaskStates.TIMEOUT,
-                         TaskStates.REVOKE,
-                         TaskStates.TERMINATE,
-                     ]
-
-            if revoke:
+            if self.model.task.state in (TaskStates.fail_states() + TaskStates.interrupt_states()) \
+                    or self.model.root.state in (TaskStates.fail_states() + TaskStates.interrupt_states()):
                 raise RevokeException(
                     'detect task 【%s】 state: %s' % (self.model.task.name, self.model.task.state))
 
@@ -1698,7 +1711,7 @@ class SeaflowStep(object):
         else:
             self.model.update(loop_index=self.model.loop_index + 1, _refresh=False)
             countdown = self.model.node.loop_config.get('countdown', 0)
-            self.seagull.info('sleep %ss...' % countdown)
+            self.seagull.debug('sleep %ss...' % countdown)
             get_func(self.model.node.action.func).apply_async((self.id,), countdown=countdown)
 
     def _forward(self):
@@ -1754,6 +1767,44 @@ class SeaflowStep(object):
         finally:
             self.task.seagull.flush(True)
 
+    def _terminate(self):
+        self.reload()
+        if self.model.state not in StepStates.terminable_states():
+            return
+        tnow = timezone.now()
+        duration = 0
+        if self.model.start_time:
+            duration = tnow - self.model.start_time
+            duration = float('%s.%s' % (duration.seconds, duration.microseconds))
+        self.seagull.flush(True, merge=True)
+        self.model.update(
+            state=StepStates.TERMINATE,
+            end_time=timezone.now(),
+            duration=duration
+        )
+        self._do_callback('STEP_STATE_%s' % StepStates.TERMINATE)
+        if self.model.node.action_type in [ActionTypes.Default, ActionTypes.Carrier]:
+            if AsyncResult(self.model.identifier).state in ['PENDING', 'RECEIVED', 'STARTED', 'RETRY']:
+                from . import celery_app
+                celery_app.control.revoke(self.model.identifier, terminate=True)
+
+    def _awake(self):
+        from . import tasks
+        self.realod()
+        if self.model.state != StepStates.SLEEP:
+            return
+
+        if self.model.node.action_type == ActionTypes.Carrier:
+            # 旁路节点
+            func = tasks.start_carrier_step
+        elif self.model.node.action_type == ActionTypes.External:
+            # 外部节点
+            func = tasks.publish_external_step
+        else:
+            # 普通节点
+            func = get_func(self.model.node.action.func)
+        func.apply_async((self.id,))
+
     def _adapt_outputs(self, outputs):
         # outputs = outputs or {}
 
@@ -1799,6 +1850,21 @@ class SeaflowStep(object):
         loop_condition = self.model.node.loop_config['condition']
 
         return not jsonLogic(loop_condition, data)
+
+    def _skip_or_not(self):
+        """
+        判断是否跳过
+        :return:
+        """
+
+        data = {
+            'input': self.model.input,
+            'context': (self.model.root or self.model.task).context
+        }
+
+        skip_condition = self.model.node.skip_config['condition']
+
+        return jsonLogic(skip_condition, data)
 
     def _do_callback(self, event):
         """

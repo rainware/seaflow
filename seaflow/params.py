@@ -176,6 +176,7 @@ class ParamAdapter(object):
         d = {}
 
         raw = raw or {}
+
         def __recursive(parser, o, key):
             if isinstance(parser, dict):
                 o[key] = {}
@@ -195,7 +196,6 @@ class ParamAdapter(object):
 
         return d
 
-
     def dump(self):
         return json.dumps(self.dict, ensure_ascii=False)
 
@@ -205,6 +205,7 @@ class ParamAdapter(object):
         :param adapter: dict, {"paramA": "$.a"}
         :return:
         """
+
         def __recursive(o):
             for k, v in o.items():
                 if isinstance(v, dict):
